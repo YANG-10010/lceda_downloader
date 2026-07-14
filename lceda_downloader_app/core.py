@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """LCSC/LcEDA 3D model downloader.
 
 Features:
@@ -159,7 +159,7 @@ Files in this folder:
 """
 
 AD_ALTIUM_BUILDER_PROJECT = "EasyedaToAltiumBridge"
-AD_ALTIUM_BUILDER_VERSION = "v1"
+AD_ALTIUM_BUILDER_VERSION = "v2-pin-location-fix"
 AD_ALTIUM_BUILDER_CSPROJ_TEXT = """<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -654,14 +654,17 @@ internal static class Program
             attrByParent.TryGetValue(p.Id, out var attrs);
             var number = SafeNonEmpty(attrs, "NUMBER") ?? (i + 1).ToString(CultureInfo.InvariantCulture);
             var name = SafeNonEmpty(attrs, "NAME") ?? number;
+            var pinLength = p.Length > 0.000001 ? p.Length : 10.0;
             var pinFlags = PinConglomerateFlags.DisplayNameVisible | PinConglomerateFlags.DesignatorVisible;
             pinFlags |= RotationToPinFlags(p.Rotation);
             var pin = new SchPin
             {
                 Designator = number,
                 Name = name,
-                Location = CoordPoint.FromMMs(UnitSymbolToMm(p.X), UnitSymbolToMm(p.Y)),
-                PinLength = Coord.FromMMs(UnitSymbolToMm(p.Length > 0.000001 ? p.Length : 10.0)),
+                // EasyEDA stores X/Y at the external electrical tip, while
+                // Altium stores SchPin.Location at the body-side pin root.
+                Location = EasyedaPinTipToAltiumRoot(p.X, p.Y, pinLength, p.Rotation),
+                PinLength = Coord.FromMMs(UnitSymbolToMm(pinLength)),
                 Color = System.Drawing.Color.Red,
                 AreaColor = System.Drawing.Color.Red,
                 Electrical = PinElectricalType.Passive,
@@ -1341,6 +1344,42 @@ internal static class Program
         if (widthMm > 0.000001)
             return widthMm;
         return 0.05;
+    }
+
+    private static CoordPoint EasyedaPinTipToAltiumRoot(
+        double tipX,
+        double tipY,
+        double pinLength,
+        double rotationDeg
+    )
+    {
+        // EasyEDA PIN coordinates identify the external electrical connection
+        // point. Altium SchPin.Location identifies the opposite, body-side
+        // root. Move one pin length from the EasyEDA tip toward the body.
+        var rootX = tipX;
+        var rootY = tipY;
+        var angle = NormalizeAngle(rotationDeg);
+        var quadrant = (int)Math.Round(angle / 90.0, MidpointRounding.AwayFromZero) % 4;
+        if (quadrant < 0)
+            quadrant += 4;
+
+        switch (quadrant)
+        {
+            case 0:
+                rootX += pinLength;
+                break;
+            case 1:
+                rootY += pinLength;
+                break;
+            case 2:
+                rootX -= pinLength;
+                break;
+            case 3:
+                rootY -= pinLength;
+                break;
+        }
+
+        return CoordPoint.FromMMs(UnitSymbolToMm(rootX), UnitSymbolToMm(rootY));
     }
 
     private static PinConglomerateFlags RotationToPinFlags(double rotationDeg)
@@ -2053,4 +2092,3 @@ def export_ad_altium_libs(
         except Exception:
             pass
     return exported
-
