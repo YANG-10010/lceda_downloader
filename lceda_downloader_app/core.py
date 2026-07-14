@@ -665,8 +665,8 @@ internal static class Program
                 // Altium stores SchPin.Location at the body-side pin root.
                 Location = EasyedaPinTipToAltiumRoot(p.X, p.Y, pinLength, p.Rotation),
                 PinLength = Coord.FromMMs(UnitSymbolToMm(pinLength)),
-                Color = System.Drawing.Color.Red,
-                AreaColor = System.Drawing.Color.Red,
+                Color = System.Drawing.Color.Black,
+                AreaColor = System.Drawing.Color.Black,
                 Electrical = PinElectricalType.Passive,
                 PinConglomerate = pinFlags,
                 IsNameVisible = true,
